@@ -40,7 +40,11 @@ import {
   setActivePresentationIdInCloud,
   deletePresentationFromCloud,
   subscribeToCloudLibrary,
-  subscribeToSinglePresentation
+  subscribeToSinglePresentation,
+  subscribeToCloudActiveState,
+  fetchPresentationFromCloud,
+  fetchActivePresentationFromCloud,
+  CLIENT_ID
 } from './services/presentationCloudService';
 import { CheckCircle, Info, FileUp } from 'lucide-react';
 
@@ -84,6 +88,12 @@ export default function App() {
   const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Cloud synchronization refs to prevent race conditions on initial mount
+  const [isCloudHydrated, setIsCloudHydrated] = useState<boolean>(false);
+  const isUserModifiedRef = React.useRef<boolean>(false);
+  const currentPresentationIdRef = React.useRef<string>(presentation.id);
+  currentPresentationIdRef.current = presentation.id;
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
@@ -117,7 +127,56 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // Multi-device Cloud Firestore Library Listener
+  // 1. Initial Cloud State Hydration: on startup (phone, incognito tab, or new browser),
+  // pull the latest active presentation and library directly from Firestore
+  useEffect(() => {
+    let isMounted = true;
+    async function initCloudState() {
+      try {
+        const cloudActive = await fetchActivePresentationFromCloud();
+        if (cloudActive && isMounted) {
+          currentPresentationIdRef.current = cloudActive.id;
+          setPresentation(cloudActive);
+          localStorage.setItem('kho_bai_giang_active', JSON.stringify(cloudActive));
+        }
+      } catch (err) {
+        console.warn('Initial cloud hydration check note:', err);
+      } finally {
+        if (isMounted) {
+          setIsCloudHydrated(true);
+        }
+      }
+    }
+    initCloudState();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // 2. Global Active Presentation sync listener across all devices/tabs
+  useEffect(() => {
+    const unsubscribeActive = subscribeToCloudActiveState(async (activeId, lastEditor) => {
+      // If another device (e.g. phone, other browser, other user) activated or created another presentation
+      if (lastEditor !== CLIENT_ID && activeId && activeId !== currentPresentationIdRef.current) {
+        const remotePres = await fetchPresentationFromCloud(activeId);
+        if (remotePres) {
+          currentPresentationIdRef.current = remotePres.id;
+          setPresentation(remotePres);
+          setActiveSlideIndex(0);
+          setSelectedElementId(null);
+          localStorage.setItem('kho_bai_giang_active', JSON.stringify(remotePres));
+          isUserModifiedRef.current = false;
+          showToast(`Đã đồng bộ bài giảng "${remotePres.title}" từ thiết bị khác!`);
+        }
+      }
+    });
+
+    return () => {
+      unsubscribeActive();
+    };
+  }, []);
+
+  // 3. Multi-device Cloud Firestore Library Listener
   useEffect(() => {
     const unsubscribeCloudLib = subscribeToCloudLibrary((cloudList) => {
       if (cloudList && cloudList.length > 0) {
@@ -131,18 +190,15 @@ export default function App() {
     };
   }, []);
 
-  // Multi-device Cloud Firestore Active Presentation Listener
+  // 4. Multi-device Cloud Firestore Active Presentation Live Content Listener
   useEffect(() => {
     if (!presentation.id) return;
 
     const unsubscribeSingle = subscribeToSinglePresentation(presentation.id, (cloudP, isLocalChange) => {
-      if (!isLocalChange && cloudP) {
+      if (!isLocalChange && cloudP && cloudP.id === currentPresentationIdRef.current) {
         setPresentation((current) => {
-          // If remote change has different title or slides content, update smoothly
-          if (
-            current.id === cloudP.id && 
-            (current.updatedAt !== cloudP.updatedAt || current.slides.length !== cloudP.slides.length || current.title !== cloudP.title)
-          ) {
+          // Compare JSON to avoid resetting cursor or unneeded re-render
+          if (JSON.stringify(current) !== JSON.stringify(cloudP)) {
             localStorage.setItem('kho_bai_giang_active', JSON.stringify(cloudP));
             return cloudP;
           }
@@ -242,6 +298,7 @@ export default function App() {
 
   // Record history when presentation changes
   const updatePresentationWithHistory = useCallback((updater: (prev: Presentation) => Presentation) => {
+    isUserModifiedRef.current = true;
     setPresentation((prev) => {
       const next = updater(prev);
       setHistory(h => [...h.slice(0, historyIndex + 1), prev]);
@@ -254,6 +311,8 @@ export default function App() {
   // Real-time debounced auto-save & cloud synchronization engine
   useEffect(() => {
     if (!isRealtimeEnabled) return;
+    if (!isCloudHydrated) return; // Prevent overwriting cloud data during initial hydration
+    if (!isUserModifiedRef.current) return; // Only sync to cloud if local changes were made
 
     setIsRealtimeSyncing(true);
     const timer = setTimeout(() => {
@@ -290,6 +349,7 @@ export default function App() {
 
         setLastSavedTime(getFormattedTimeString());
         setIsSaved(true);
+        isUserModifiedRef.current = false;
       } catch (e) {
         console.error('Real-time sync error', e);
       } finally {
@@ -298,7 +358,7 @@ export default function App() {
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [presentation, isRealtimeEnabled]);
+  }, [presentation, isRealtimeEnabled, isCloudHydrated]);
 
   // Current slide
   const currentSlide = presentation.slides[activeSlideIndex] || presentation.slides[0];
@@ -309,6 +369,7 @@ export default function App() {
   // Undo / Redo
   const handleUndo = () => {
     if (historyIndex >= 0) {
+      isUserModifiedRef.current = true;
       const prevPresentation = history[historyIndex];
       setHistoryIndex(i => i - 1);
       setPresentation(prevPresentation);
@@ -317,6 +378,7 @@ export default function App() {
 
   const handleRedo = () => {
     if (historyIndex < history.length - 1) {
+      isUserModifiedRef.current = true;
       const nextPresentation = history[historyIndex + 1];
       setHistoryIndex(i => i + 1);
       setPresentation(nextPresentation);
@@ -1131,6 +1193,8 @@ export default function App() {
       });
 
       // 3. Save active scratchpad locally and to Cloud Firestore
+      currentPresentationIdRef.current = lectureToSave.id;
+      isUserModifiedRef.current = false;
       localStorage.setItem('kho_bai_giang_active', JSON.stringify(lectureToSave));
       savePresentationToCloud(lectureToSave).catch((err) => {
         console.warn('Saved to persistent cache (pending cloud upload):', err);
@@ -1276,6 +1340,8 @@ export default function App() {
       ]
     };
     setPresentation(blankPresentation);
+    currentPresentationIdRef.current = blankPresentation.id;
+    isUserModifiedRef.current = false;
     setActiveSlideIndex(0);
     setSelectedElementId(null);
     savePresentationToCloud(blankPresentation).catch(console.warn);
@@ -1302,8 +1368,12 @@ export default function App() {
           const imported = JSON.parse(event.target?.result as string);
           if (imported.slides && Array.isArray(imported.slides)) {
             setPresentation(imported);
+            currentPresentationIdRef.current = imported.id;
+            isUserModifiedRef.current = false;
             setActiveSlideIndex(0);
             setSelectedElementId(null);
+            savePresentationToCloud(imported).catch(console.warn);
+            setActivePresentationIdInCloud(imported.id).catch(console.warn);
             setIsRepositoryOpen(false);
             alert(`Đã tải bài giảng "${imported.title}" thành công!`);
           }
@@ -1332,21 +1402,29 @@ export default function App() {
   // PowerPoint Import Handlers
   const handleOpenPptxForEdit = (importedPresentation: Presentation) => {
     setPresentation(importedPresentation);
+    currentPresentationIdRef.current = importedPresentation.id;
+    isUserModifiedRef.current = false;
     setActiveSlideIndex(0);
     setSelectedElementId(null);
     setViewMode('normal');
     setIsImportPptxOpen(false);
     setPptxInitialFile(null);
+    savePresentationToCloud(importedPresentation).catch(console.warn);
+    setActivePresentationIdInCloud(importedPresentation.id).catch(console.warn);
     showToast(`Đã mở bài giảng PowerPoint "${importedPresentation.title}" (${importedPresentation.slides.length} trang) để chỉnh sửa!`);
   };
 
   const handleOpenPptxForSlideShow = (importedPresentation: Presentation) => {
     setPresentation(importedPresentation);
+    currentPresentationIdRef.current = importedPresentation.id;
+    isUserModifiedRef.current = false;
     setActiveSlideIndex(0);
     setSelectedElementId(null);
     setViewMode('slideshow');
     setIsImportPptxOpen(false);
     setPptxInitialFile(null);
+    savePresentationToCloud(importedPresentation).catch(console.warn);
+    setActivePresentationIdInCloud(importedPresentation.id).catch(console.warn);
     showToast(`Đang trình chiếu bài giảng PowerPoint "${importedPresentation.title}"!`);
   };
 
@@ -1579,8 +1657,11 @@ export default function App() {
         currentPresentation={presentation}
         onLoadPresentation={(p) => {
           setPresentation(p);
+          currentPresentationIdRef.current = p.id;
+          isUserModifiedRef.current = false;
           setActiveSlideIndex(0);
           setSelectedElementId(null);
+          localStorage.setItem('kho_bai_giang_active', JSON.stringify(p));
           setActivePresentationIdInCloud(p.id).catch(console.warn);
           showToast(`Đã mở bài giảng "${p.title}"`);
         }}

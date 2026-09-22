@@ -207,3 +207,41 @@ export function subscribeToSinglePresentation(
 
   return unsubscribe;
 }
+
+/**
+ * Fetches a single presentation directly from Firestore
+ */
+export async function fetchPresentationFromCloud(presentationId: string): Promise<Presentation | null> {
+  try {
+    const docRef = doc(db, 'presentations', presentationId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return cloudDocToPresentation(snap.data());
+    }
+    return null;
+  } catch (error) {
+    console.warn(`Error fetching presentation ${presentationId} from cloud:`, error);
+    return null;
+  }
+}
+
+/**
+ * Fetches the currently active presentation from cloud system state
+ */
+export async function fetchActivePresentationFromCloud(): Promise<Presentation | null> {
+  try {
+    const stateDocRef = doc(db, 'system', 'state');
+    const stateSnap = await getDoc(stateDocRef);
+    if (stateSnap.exists()) {
+      const activeId = stateSnap.data()?.activePresentationId;
+      if (activeId && activeId !== 'test-123') {
+        return await fetchPresentationFromCloud(activeId);
+      }
+    }
+    return null;
+  } catch (error) {
+    console.warn('Error fetching active presentation from cloud state:', error);
+    return null;
+  }
+}
+
