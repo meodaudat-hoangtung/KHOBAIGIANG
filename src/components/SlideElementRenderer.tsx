@@ -8,7 +8,10 @@ import {
   ChartElement, 
   SmartArtElement, 
   WordArtElement, 
-  CameoElement 
+  CameoElement,
+  VideoElement,
+  AudioElement,
+  LinkElement
 } from '../types/presentation';
 import { 
   ArrowRight, 
@@ -17,9 +20,16 @@ import {
   Camera, 
   BarChart3, 
   FileText,
-  Volume2
+  Volume2,
+  Film,
+  Play,
+  Music,
+  ExternalLink,
+  Globe,
+  Radio
 } from 'lucide-react';
 import { renderMixedMathContent } from '../utils/mathRenderer';
+import { getYouTubeEmbedUrl, getFacebookEmbedUrl } from './MultimediaModal';
 
 interface SlideElementRendererProps {
   element: SlideElement;
@@ -72,16 +82,23 @@ export const SlideElementRenderer: React.FC<SlideElementRendererProps> = ({
           fontWeight: textEl.fontWeight || 'normal',
           fontStyle: textEl.fontStyle || 'normal',
           textDecoration: textEl.textDecoration || 'none',
-          textAlign: textEl.textAlign || 'left',
           color: textEl.color || '#ffffff',
           backgroundColor: textEl.backgroundColor,
           borderRadius: textEl.borderRadius ? `${textEl.borderRadius}px` : undefined,
           padding: textEl.padding ? `${textEl.padding}px` : '4px',
-          whiteSpace: 'pre-line',
-          lineHeight: '1.35'
+          lineHeight: '1.4'
         }}
       >
-        {renderMixedMathContent(textEl.text)}
+        <div
+          className="w-full block"
+          style={{
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            textAlign: textEl.textAlign || 'left'
+          }}
+        >
+          {renderMixedMathContent(textEl.text)}
+        </div>
       </div>
     );
   }
@@ -179,7 +196,8 @@ export const SlideElementRenderer: React.FC<SlideElementRendererProps> = ({
             style={{
               color: shapeEl.textColor || '#ffffff',
               fontSize: `${shapeEl.fontSize || 16}px`,
-              whiteSpace: 'pre-line'
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word'
             }}
           >
             {renderMixedMathContent(shapeEl.text)}
@@ -395,5 +413,125 @@ export const SlideElementRenderer: React.FC<SlideElementRendererProps> = ({
     );
   }
 
-  return <div>{element.type}</div>;
+  // 9. VIDEO ELEMENT (Hỗ trợ file video máy tính & link YouTube / Facebook / Web)
+  if (element.type === 'video') {
+    const videoEl = element as VideoElement;
+    const ytUrl = getYouTubeEmbedUrl(videoEl.url);
+    const fbUrl = getFacebookEmbedUrl(videoEl.url);
+    const isEmbed = Boolean(ytUrl || fbUrl);
+    const embedSrc = ytUrl || fbUrl || videoEl.url;
+
+    return (
+      <div className="w-full h-full rounded-xl overflow-hidden shadow-xl border border-white/20 bg-black flex flex-col relative group">
+        {/* Optional Title Bar */}
+        {videoEl.title && (
+          <div className="bg-slate-900/90 text-white text-[11px] font-semibold px-2.5 py-1 flex items-center justify-between border-b border-white/10 shrink-0 z-10">
+            <div className="flex items-center gap-1.5 truncate">
+              <Film size={13} className="text-red-400 shrink-0" />
+              <span className="truncate">{videoEl.title}</span>
+            </div>
+            <span className="text-[9px] px-1.5 py-0.2 rounded bg-red-600/80 font-bold uppercase tracking-wider shrink-0 ml-1">
+              {ytUrl ? 'YouTube' : fbUrl ? 'Facebook' : 'Video'}
+            </span>
+          </div>
+        )}
+
+        <div className="flex-1 w-full h-full relative overflow-hidden bg-black flex items-center justify-center">
+          {isEmbed ? (
+            <iframe
+              src={embedSrc}
+              title={videoEl.title || 'Video Player'}
+              className="w-full h-full border-0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          ) : (
+            <video
+              src={videoEl.url}
+              controls
+              className="w-full h-full object-contain"
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // 10. AUDIO ELEMENT (Hỗ trợ file âm thanh từ máy tính & link online)
+  if (element.type === 'audio') {
+    const audioEl = element as AudioElement;
+    return (
+      <div className="w-full h-full rounded-xl p-3 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/40 text-white shadow-xl flex flex-col justify-between select-none">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2 truncate">
+            <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md">
+              <Music size={15} />
+            </div>
+            <div className="truncate">
+              <h4 className="font-bold text-xs truncate leading-tight text-indigo-100">
+                {audioEl.title || 'Âm thanh bài giảng'}
+              </h4>
+              <span className="text-[10px] text-indigo-300/80 flex items-center gap-1">
+                <Volume2 size={11} className="text-emerald-400 animate-pulse" />
+                <span>Âm thanh phát chuẩn</span>
+              </span>
+            </div>
+          </div>
+          <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 font-semibold shrink-0">
+            Audio
+          </span>
+        </div>
+
+        <div className="w-full mt-1">
+          <audio
+            src={audioEl.url}
+            controls
+            className="w-full h-8 rounded-md accent-indigo-500"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // 11. LINK ELEMENT (Liên kết web / tài liệu)
+  if (element.type === 'link') {
+    const linkEl = element as LinkElement;
+    return (
+      <div 
+        onClick={(e) => {
+          if (isPresenterMode) {
+            e.stopPropagation();
+            window.open(linkEl.url, '_blank', 'noopener,noreferrer');
+          }
+        }}
+        className={`w-full h-full rounded-xl p-3.5 bg-gradient-to-r from-blue-900/90 to-indigo-900/90 border border-blue-400/40 text-white shadow-xl flex items-center justify-between transition ${
+          isPresenterMode ? 'cursor-pointer hover:scale-102 hover:brightness-110' : ''
+        }`}
+        title={`Mở liên kết: ${linkEl.url}`}
+      >
+        <div className="flex items-center gap-3 overflow-hidden">
+          <div className="w-10 h-10 rounded-xl bg-blue-500 text-white flex items-center justify-center shrink-0 shadow-md ring-2 ring-blue-300/30">
+            <ExternalLink size={20} />
+          </div>
+          <div className="truncate">
+            <h4 className="font-bold text-xs text-white truncate leading-snug">
+              {linkEl.title || linkEl.url}
+            </h4>
+            <p className="text-[11px] text-blue-200 truncate mt-0.5">
+              {linkEl.description || linkEl.url}
+            </p>
+          </div>
+        </div>
+
+        <div className="shrink-0 ml-2 text-right">
+          <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-blue-400/20 text-blue-200 border border-blue-300/30 flex items-center gap-1">
+            <Globe size={11} />
+            <span>{isPresenterMode ? 'Bấm mở ↗' : 'Liên kết'}</span>
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  return <div>{(element as any)?.type || ''}</div>;
 };

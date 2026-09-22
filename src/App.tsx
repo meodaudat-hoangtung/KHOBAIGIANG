@@ -6,7 +6,8 @@ import {
   ActiveTab, 
   ViewMode, 
   ShapeType, 
-  PresentationTheme 
+  PresentationTheme,
+  ElementAnimationType 
 } from './types/presentation';
 import { DEFAULT_PRESENTATION, PRESENTATION_THEMES, LECTURE_LIBRARY } from './data/defaultLectures';
 import { TitleBar } from './components/TitleBar';
@@ -27,6 +28,7 @@ import {
   SymbolPickerModal 
 } from './components/InsertDialogs';
 import { MathFormulaModal } from './components/MathFormulaModal';
+import { MultimediaModal } from './components/MultimediaModal';
 import { 
   broadcastPresentationSync, 
   broadcastLibrarySync, 
@@ -135,6 +137,8 @@ export default function App() {
   const [isSymbolPickerOpen, setIsSymbolPickerOpen] = useState<boolean>(false);
   const [isMathModalOpen, setIsMathModalOpen] = useState<boolean>(false);
   const [mathModalInitialFormula, setMathModalInitialFormula] = useState<string>('x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}');
+  const [isMultimediaOpen, setIsMultimediaOpen] = useState<boolean>(false);
+  const [multimediaInitialTab, setMultimediaInitialTab] = useState<'video-file' | 'video-online' | 'audio' | 'link'>('video-online');
 
   // Global Drag-and-drop listener for PowerPoint files (.pptx, .ppt)
   useEffect(() => {
@@ -558,6 +562,95 @@ export default function App() {
     handleUpdateElement({ zIndex: Math.max(1, (selectedElement?.zIndex || 1) - 1) });
   };
 
+  // Element Animation Handlers
+  const [previewAnimationElementId, setPreviewAnimationElementId] = useState<string | null>(null);
+
+  const handlePreviewAnimation = (elementId?: string) => {
+    const targetId = elementId || selectedElementId || 'ALL';
+    setPreviewAnimationElementId(targetId);
+    setTimeout(() => {
+      setPreviewAnimationElementId(null);
+    }, 900);
+  };
+
+  const handleApplyToAllAnimations = (anim: ElementAnimationType) => {
+    updatePresentationWithHistory(prev => {
+      const slides = [...prev.slides];
+      const curSlide = slides[activeSlideIndex];
+      if (!curSlide) return prev;
+
+      // Sort elements from top to bottom (Y position) so animations play in natural reading order
+      const sortedElements = [...curSlide.elements].sort((a, b) => a.y - b.y);
+      const orderMap = new Map<string, number>();
+      sortedElements.forEach((el, index) => {
+        orderMap.set(el.id, index + 1);
+      });
+
+      const updatedElements = curSlide.elements.map(el => ({
+        ...el,
+        animation: anim,
+        animationOrder: orderMap.get(el.id) || 1
+      }));
+
+      slides[activeSlideIndex] = { ...curSlide, elements: updatedElements };
+      return { ...prev, slides };
+    });
+
+    handlePreviewAnimation('ALL');
+    showToast(`Đã gán hiệu ứng "${anim.toUpperCase()}" cho tất cả khối trong slide!`);
+  };
+
+  const handleClearAllAnimations = () => {
+    updatePresentationWithHistory(prev => {
+      const slides = [...prev.slides];
+      const curSlide = slides[activeSlideIndex];
+      if (!curSlide) return prev;
+
+      const updatedElements = curSlide.elements.map(el => ({
+        ...el,
+        animation: 'none' as ElementAnimationType,
+        animationOrder: undefined
+      }));
+
+      slides[activeSlideIndex] = { ...curSlide, elements: updatedElements };
+      return { ...prev, slides };
+    });
+    showToast('Đã xóa tất cả hiệu ứng của các khối trong slide này!');
+  };
+
+  const handleMoveAnimationOrder = (elementId: string, direction: 'earlier' | 'later') => {
+    updatePresentationWithHistory(prev => {
+      const slides = [...prev.slides];
+      const curSlide = slides[activeSlideIndex];
+      if (!curSlide) return prev;
+
+      const animated = curSlide.elements
+        .filter(el => el.animation && el.animation !== 'none')
+        .sort((a, b) => (a.animationOrder ?? 999) - (b.animationOrder ?? 999));
+
+      const idx = animated.findIndex(el => el.id === elementId);
+      if (idx === -1) return prev;
+
+      const targetIdx = direction === 'earlier' ? idx - 1 : idx + 1;
+      if (targetIdx < 0 || targetIdx >= animated.length) return prev;
+
+      const elA = animated[idx];
+      const elB = animated[targetIdx];
+
+      const orderA = idx + 1;
+      const orderB = targetIdx + 1;
+
+      const updatedElements = curSlide.elements.map(el => {
+        if (el.id === elA.id) return { ...el, animationOrder: orderB };
+        if (el.id === elB.id) return { ...el, animationOrder: orderA };
+        return el;
+      });
+
+      slides[activeSlideIndex] = { ...curSlide, elements: updatedElements };
+      return { ...prev, slides };
+    });
+  };
+
   // Insert Helpers
   const addElementToCurrentSlide = (newElement: SlideElement) => {
     updatePresentationWithHistory(prev => {
@@ -795,44 +888,80 @@ export default function App() {
     addElementToCurrentSlide(commentEl);
   };
 
-  const handleAddVideo = () => {
+  const handleOpenMultimedia = (tab: 'video-file' | 'video-online' | 'audio' | 'link' = 'video-online') => {
+    setMultimediaInitialTab(tab);
+    setIsMultimediaOpen(true);
+  };
+
+  const handleInsertVideoElement = (videoData: {
+    url: string;
+    title: string;
+    sourceType: 'file' | 'youtube' | 'facebook' | 'url';
+  }) => {
     const videoEl: SlideElement = {
       id: `video-${Date.now()}`,
-      type: 'shape',
-      shapeType: 'rounded-rect',
-      fillColor: '#0f172a',
-      strokeColor: '#ef4444',
-      strokeWidth: 2,
-      text: '🎬 Video Minh Họa Bài Học\n(Bấm để phát video bài giảng)',
-      textColor: '#ffffff',
-      fontSize: 20,
-      x: 25,
-      y: 25,
-      width: 50,
-      height: 50,
+      type: 'video',
+      url: videoData.url,
+      title: videoData.title,
+      sourceType: videoData.sourceType,
+      x: 20,
+      y: 18,
+      width: 60,
+      height: 64,
       zIndex: 10
     };
     addElementToCurrentSlide(videoEl);
+    showToast(`Đã chèn video "${videoData.title}" vào bài giảng.`);
   };
 
-  const handleAddAudio = () => {
+  const handleInsertAudioElement = (audioData: {
+    url: string;
+    title: string;
+    sourceType: 'file' | 'url';
+  }) => {
     const audioEl: SlideElement = {
       id: `audio-${Date.now()}`,
-      type: 'shape',
-      shapeType: 'rounded-rect',
-      fillColor: '#4338ca',
-      strokeColor: '#a5b4fc',
-      strokeWidth: 2,
-      text: '🔊 Âm Thanh Giảng Bài & Phát Âm Chuẩn',
-      textColor: '#ffffff',
-      fontSize: 18,
-      x: 30,
+      type: 'audio',
+      url: audioData.url,
+      title: audioData.title,
+      sourceType: audioData.sourceType,
+      x: 25,
       y: 40,
-      width: 40,
+      width: 50,
       height: 18,
       zIndex: 10
     };
     addElementToCurrentSlide(audioEl);
+    showToast(`Đã chèn âm thanh "${audioData.title}" vào bài giảng.`);
+  };
+
+  const handleInsertLinkElement = (linkData: {
+    url: string;
+    title: string;
+    description?: string;
+  }) => {
+    const linkEl: SlideElement = {
+      id: `link-${Date.now()}`,
+      type: 'link',
+      url: linkData.url,
+      title: linkData.title,
+      description: linkData.description,
+      x: 25,
+      y: 40,
+      width: 50,
+      height: 18,
+      zIndex: 10
+    };
+    addElementToCurrentSlide(linkEl);
+    showToast(`Đã chèn liên kết "${linkData.title}" vào bài giảng.`);
+  };
+
+  const handleAddVideo = () => {
+    handleOpenMultimedia('video-online');
+  };
+
+  const handleAddAudio = () => {
+    handleOpenMultimedia('audio');
   };
 
   // Math Formula (LaTeX) Handlers
@@ -840,7 +969,12 @@ export default function App() {
     if (formula) {
       setMathModalInitialFormula(formula);
     } else if (selectedElement && selectedElement.type === 'text') {
-      setMathModalInitialFormula(selectedElement.text || 'x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}');
+      const match = selectedElement.text.match(/\$\$[\s\S]+?\$\$|\$[^\$]+?\$/);
+      if (match) {
+        setMathModalInitialFormula(match[0]);
+      } else {
+        setMathModalInitialFormula('v');
+      }
     } else {
       setMathModalInitialFormula('x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}');
     }
@@ -848,18 +982,28 @@ export default function App() {
   };
 
   const handleInsertMathFormula = (formula: string) => {
+    const isInline = formula.startsWith('$') && !formula.startsWith('$$');
+
     if (selectedElement && selectedElement.type === 'text') {
-      // If current text has content, decide whether to replace or append
-      const existing = selectedElement.text.trim();
-      const updatedText = existing && !existing.startsWith('$') ? `${existing}\n${formula}` : formula;
-      handleUpdateElement({ text: updatedText });
+      const existing = selectedElement.text;
+
+      if (existing === 'BẤM ĐỂ NHẬP TIÊU ĐỀ BÀI HỌC' || existing === 'Bấm để thêm văn bản') {
+        handleUpdateElement({ text: formula });
+      } else if (existing.trim()) {
+        // Inline math ($...$) stays on the same line with space; block math ($$...$$) separates with newline
+        const separator = isInline ? ' ' : '\n';
+        handleUpdateElement({ text: `${existing.trim()}${separator}${formula} ` });
+      } else {
+        handleUpdateElement({ text: formula });
+      }
+      showToast(isInline ? 'Đã chèn công thức cùng dòng (không nhảy dòng).' : 'Đã chèn khối công thức LaTeX.');
     } else {
       // Create new clean formula block
       const mathEl: SlideElement = {
         id: `math-${Date.now()}`,
         type: 'text',
         text: formula,
-        fontSize: 30,
+        fontSize: isInline ? 28 : 30,
         fontFamily: 'Segoe UI',
         color: '#ffffff',
         fontWeight: 'normal',
@@ -876,6 +1020,7 @@ export default function App() {
         zIndex: 10
       };
       addElementToCurrentSlide(mathEl);
+      showToast(isInline ? 'Đã chèn công thức cùng dòng.' : 'Đã chèn khối công thức LaTeX.');
     }
   };
 
@@ -1185,6 +1330,7 @@ export default function App() {
         onAddWordArt={handleAddWordArt}
         onOpenMathFormula={() => handleOpenMathModal()}
         onOpenSymbolPicker={() => setIsSymbolPickerOpen(true)}
+        onOpenMultimedia={handleOpenMultimedia}
         onAddVideo={handleAddVideo}
         onAddAudio={handleAddAudio}
         onAddComment={handleAddComment}
@@ -1224,6 +1370,12 @@ export default function App() {
           }));
           alert(`Đã áp dụng hiệu ứng "${trans.toUpperCase()}" cho tất cả các trang chiếu!`);
         }}
+        // Animations tab
+        slideElements={currentSlide?.elements || []}
+        onApplyToAllAnimations={handleApplyToAllAnimations}
+        onClearAllAnimations={handleClearAllAnimations}
+        onPreviewAnimation={handlePreviewAnimation}
+        onMoveAnimationOrder={handleMoveAnimationOrder}
         // Slide Show tab
         onStartFromBeginning={() => {
           setActiveSlideIndex(0);
@@ -1280,6 +1432,8 @@ export default function App() {
                 onBringForward={handleBringForward}
                 onSendBackward={handleSendBackward}
                 onEditFormula={(currentText) => handleOpenMathModal(currentText)}
+                onOpenAnimationsTab={() => setActiveTab('animations')}
+                previewAnimationElementId={previewAnimationElementId}
                 aspectRatio={presentation.aspectRatio}
                 zoomLevel={zoomLevel}
               />
@@ -1418,6 +1572,16 @@ export default function App() {
         onClose={() => setIsMathModalOpen(false)}
         onInsertFormula={handleInsertMathFormula}
         initialFormula={mathModalInitialFormula}
+      />
+
+      {/* 8.5. Multimedia (Đa phương tiện) Modal */}
+      <MultimediaModal
+        isOpen={isMultimediaOpen}
+        onClose={() => setIsMultimediaOpen(false)}
+        initialTab={multimediaInitialTab}
+        onInsertVideo={handleInsertVideoElement}
+        onInsertAudio={handleInsertAudioElement}
+        onInsertLink={handleInsertLinkElement}
       />
 
       {/* 9. Real-time Toast Feedback Notification */}

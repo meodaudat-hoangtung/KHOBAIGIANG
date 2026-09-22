@@ -8,6 +8,7 @@ export type ElementType =
   | 'wordart' 
   | 'video' 
   | 'audio' 
+  | 'link'
   | 'cameo';
 
 export type ShapeType = 
@@ -27,6 +28,8 @@ export type ShapeType =
 
 export type TransitionType = 'none' | 'fade' | 'push' | 'wipe' | 'zoom' | 'flip';
 
+export type ElementAnimationType = 'none' | 'appear' | 'fade-in' | 'fly-in' | 'zoom-in';
+
 export interface BaseElement {
   id: string;
   type: ElementType;
@@ -36,7 +39,8 @@ export interface BaseElement {
   height: number;
   rotation?: number;
   zIndex: number;
-  animation?: 'none' | 'appear' | 'fade-in' | 'fly-in' | 'zoom-in' | 'bounce';
+  animation?: ElementAnimationType;
+  animationOrder?: number; // Thứ tự chạy hiệu ứng: 1, 2, 3...
 }
 
 export interface TextElement extends BaseElement {
@@ -122,14 +126,23 @@ export interface WordArtElement extends BaseElement {
 
 export interface VideoElement extends BaseElement {
   type: 'video';
-  url: string; // YouTube embed or video URL
+  url: string; // YouTube embed, Facebook embed, file data/blob URL, or video URL
   title?: string;
+  sourceType?: 'file' | 'youtube' | 'facebook' | 'url';
 }
 
 export interface AudioElement extends BaseElement {
   type: 'audio';
   url: string;
   title: string;
+  sourceType?: 'file' | 'url';
+}
+
+export interface LinkElement extends BaseElement {
+  type: 'link';
+  url: string;
+  title: string;
+  description?: string;
 }
 
 export interface CameoElement extends BaseElement {
@@ -148,6 +161,7 @@ export type SlideElement =
   | WordArtElement 
   | VideoElement 
   | AudioElement 
+  | LinkElement
   | CameoElement;
 
 export interface Slide {

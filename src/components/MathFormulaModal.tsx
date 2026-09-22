@@ -70,10 +70,10 @@ export const MathFormulaModal: React.FC<MathFormulaModalProps> = ({
   isOpen,
   onClose,
   onInsertFormula,
-  initialFormula = 'x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}'
+  initialFormula = 'v'
 }) => {
   const [latexInput, setLatexInput] = useState(initialFormula);
-  const [isBlockMode, setIsBlockMode] = useState(true);
+  const [isBlockMode, setIsBlockMode] = useState(false);
 
   useEffect(() => {
     if (initialFormula) {
@@ -84,6 +84,10 @@ export const MathFormulaModal: React.FC<MathFormulaModalProps> = ({
         setIsBlockMode(true);
       } else if (clean.startsWith('$') && clean.endsWith('$')) {
         clean = clean.slice(1, -1).trim();
+        setIsBlockMode(false);
+      } else if (clean.includes('\\begin{cases}') || clean.length > 30) {
+        setIsBlockMode(true);
+      } else {
         setIsBlockMode(false);
       }
       setLatexInput(clean);
@@ -136,26 +140,43 @@ export const MathFormulaModal: React.FC<MathFormulaModalProps> = ({
                 <Sparkles size={14} className="text-amber-500" />
                 <span>Xem trước kết quả hiển thị thực tế:</span>
               </span>
-              <div className="flex items-center gap-2 text-xs">
-                <label className="flex items-center gap-1 cursor-pointer font-medium text-slate-600">
-                  <input
-                    type="radio"
-                    checked={isBlockMode}
-                    onChange={() => setIsBlockMode(true)}
-                    className="accent-blue-600"
-                  />
-                  <span>Khối nổi bật ($$ ... $$)</span>
-                </label>
-                <label className="flex items-center gap-1 cursor-pointer font-medium text-slate-600 ml-2">
-                  <input
-                    type="radio"
-                    checked={!isBlockMode}
-                    onChange={() => setIsBlockMode(false)}
-                    className="accent-blue-600"
-                  />
+              <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg text-xs">
+                <button
+                  type="button"
+                  onClick={() => setIsBlockMode(false)}
+                  className={`px-2.5 py-1 rounded-md font-medium transition cursor-pointer flex items-center gap-1 ${
+                    !isBlockMode
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Công thức nằm cùng dòng với văn bản, không nhảy dòng (Ví dụ: giả sử v là vận tốc)"
+                >
                   <span>Cùng dòng ($ ... $)</span>
-                </label>
+                  {!isBlockMode && <span className="text-[10px] bg-blue-500 px-1 rounded text-white">Liền chữ</span>}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsBlockMode(true)}
+                  className={`px-2.5 py-1 rounded-md font-medium transition cursor-pointer flex items-center gap-1 ${
+                    isBlockMode
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Công thức tách thành dòng riêng căn giữa"
+                >
+                  <span>Khối riêng ($$ ... $$)</span>
+                  {isBlockMode && <span className="text-[10px] bg-blue-500 px-1 rounded text-white">Xuống dòng</span>}
+                </button>
               </div>
+            </div>
+
+            <div className="text-[11px] text-slate-500 mb-1.5 flex items-center gap-1">
+              <span>💡</span>
+              {!isBlockMode ? (
+                <span>Chế độ <b>Cùng dòng ($...$)</b>: Thích hợp cho biến số, công thức ngắn nằm chung trong câu văn (ví dụ: <i>giả sử $v$ là vận tốc</i>).</span>
+              ) : (
+                <span>Chế độ <b>Khối riêng ($$...$$)</b>: Công thức sẽ tự động xuống dòng và căn giữa như phương trình độc lập.</span>
+              )}
             </div>
 
             {/* Rendered KaTeX Box */}

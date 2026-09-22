@@ -13,7 +13,8 @@ import {
   Maximize2, 
   Minimize2, 
   Radio,
-  Tv
+  Tv,
+  Zap
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -35,6 +36,7 @@ export const SlideShowModal: React.FC<SlideShowModalProps> = ({
   defaultSlideBg
 }) => {
   const [currentIndex, setCurrentIndex] = useState(initialSlideIndex);
+  const [revealedStep, setRevealedStep] = useState(0);
   const [isLaserPointer, setIsLaserPointer] = useState(false);
   const [laserPos, setLaserPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isPenActive, setIsPenActive] = useState(false);
@@ -49,9 +51,23 @@ export const SlideShowModal: React.FC<SlideShowModalProps> = ({
   const isDrawingRef = useRef(false);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
 
+  const currentSlide = slides[currentIndex];
+  const slideBg = currentSlide?.backgroundColor || defaultSlideBg;
+
+  // Sorted animated elements for the current slide
+  const animatedElements = (currentSlide?.elements || [])
+    .filter(el => el.animation && el.animation !== 'none')
+    .sort((a, b) => (a.animationOrder ?? 999) - (b.animationOrder ?? 999));
+
   useEffect(() => {
     setCurrentIndex(initialSlideIndex);
+    setRevealedStep(0);
   }, [initialSlideIndex]);
+
+  // Reset revealedStep whenever slide changes
+  useEffect(() => {
+    setRevealedStep(0);
+  }, [currentIndex]);
 
   // Lesson timer and real-time clock
   useEffect(() => {
@@ -63,6 +79,41 @@ export const SlideShowModal: React.FC<SlideShowModalProps> = ({
     return () => clearInterval(timer);
   }, [isOpen]);
 
+  const goToNextSlide = () => {
+    if (currentIndex < slides.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+      setRevealedStep(0);
+      clearDrawings();
+    }
+  };
+
+  const goToPrevSlide = () => {
+    if (currentIndex > 0) {
+      const prevIdx = currentIndex - 1;
+      const prevAnimatedCount = (slides[prevIdx]?.elements || [])
+        .filter(el => el.animation && el.animation !== 'none').length;
+      setCurrentIndex(prevIdx);
+      setRevealedStep(prevAnimatedCount);
+      clearDrawings();
+    }
+  };
+
+  const handleNext = () => {
+    if (revealedStep < animatedElements.length) {
+      setRevealedStep(prev => prev + 1);
+    } else {
+      goToNextSlide();
+    }
+  };
+
+  const handlePrev = () => {
+    if (revealedStep > 0) {
+      setRevealedStep(prev => prev - 1);
+    } else {
+      goToPrevSlide();
+    }
+  };
+
   // Keyboard navigation
   useEffect(() => {
     if (!isOpen) return;
@@ -70,10 +121,12 @@ export const SlideShowModal: React.FC<SlideShowModalProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
-      } else if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
-        goToNextSlide();
-      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-        goToPrevSlide();
+      } else if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        handleNext();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'Backspace') {
+        e.preventDefault();
+        handlePrev();
       } else if (e.key.toLowerCase() === 'b') {
         setIsBlackScreen(prev => !prev);
       }
@@ -81,26 +134,9 @@ export const SlideShowModal: React.FC<SlideShowModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, currentIndex, slides.length]);
+  }, [isOpen, currentIndex, slides.length, revealedStep, animatedElements.length]);
 
   if (!isOpen) return null;
-
-  const currentSlide = slides[currentIndex];
-  const slideBg = currentSlide?.backgroundColor || defaultSlideBg;
-
-  const goToNextSlide = () => {
-    if (currentIndex < slides.length - 1) {
-      setCurrentIndex(prev => prev + 1);
-      clearDrawings();
-    }
-  };
-
-  const goToPrevSlide = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex(prev => prev - 1);
-      clearDrawings();
-    }
-  };
 
   const clearDrawings = () => {
     const canvas = canvasDrawRef.current;
@@ -190,33 +226,64 @@ export const SlideShowModal: React.FC<SlideShowModalProps> = ({
 
       {/* Slide Presentation Screen */}
       <div
-        className={`relative shadow-2xl transition-all duration-300 overflow-hidden ${
+        className={`relative shadow-2xl transition-all duration-300 overflow-hidden cursor-pointer ${
           aspectRatio === '16:9' ? 'w-full max-w-[96vw] max-h-[92vh] aspect-video' : 'w-full max-w-[85vw] max-h-[92vh] aspect-4/3'
         }`}
         style={{
           background: currentSlide?.backgroundGradient || slideBg
         }}
+        onClick={() => {
+          if (!isPenActive) {
+            handleNext();
+          }
+        }}
       >
-        {/* Render elements in presenter mode */}
-        {currentSlide?.elements.map((element) => (
-          <div
-            key={element.id}
-            className="absolute"
-            style={{
-              left: `${element.x}%`,
-              top: `${element.y}%`,
-              width: `${element.width}%`,
-              height: `${element.height}%`,
-              zIndex: element.zIndex || 1
-            }}
-          >
-            <SlideElementRenderer
-              element={element}
-              isSelected={false}
-              isPresenterMode={true}
-            />
-          </div>
-        ))}
+        {/* Render elements in presenter mode with PowerPoint Animation sequence */}
+        {currentSlide?.elements.map((element) => {
+          const animIndex = animatedElements.findIndex(e => e.id === element.id);
+          const hasAnimation = animIndex !== -1;
+          const isRevealed = !hasAnimation || animIndex < revealedStep;
+          const isCurrentStep = hasAnimation && animIndex === revealedStep - 1;
+
+          let animClass = '';
+          if (hasAnimation) {
+            if (!isRevealed) {
+              animClass = 'opacity-0 pointer-events-none';
+            } else if (isCurrentStep) {
+              animClass = element.animation === 'appear'
+                ? 'animate-ppt-appear'
+                : element.animation === 'fade-in'
+                ? 'animate-ppt-fade-in'
+                : element.animation === 'fly-in'
+                ? 'animate-ppt-fly-in'
+                : element.animation === 'zoom-in'
+                ? 'animate-ppt-zoom-in'
+                : '';
+            } else {
+              animClass = 'opacity-100';
+            }
+          }
+
+          return (
+            <div
+              key={element.id}
+              className={`absolute transition-none ${animClass}`}
+              style={{
+                left: `${element.x}%`,
+                top: `${element.y}%`,
+                width: `${element.width}%`,
+                height: `${element.height}%`,
+                zIndex: element.zIndex || 1
+              }}
+            >
+              <SlideElementRenderer
+                element={element}
+                isSelected={false}
+                isPresenterMode={true}
+              />
+            </div>
+          );
+        })}
 
         {/* Real-time Drawing Canvas layer */}
         <canvas
@@ -262,13 +329,16 @@ export const SlideShowModal: React.FC<SlideShowModalProps> = ({
       )}
 
       {/* Presenter Bottom Control Bar */}
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-950/85 backdrop-blur-md border border-white/20 rounded-full px-4 py-1.5 flex items-center space-x-3 text-white text-xs z-50 shadow-2xl">
-        {/* Previous Slide */}
+      <div 
+        className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-950/85 backdrop-blur-md border border-white/20 rounded-full px-4 py-1.5 flex items-center space-x-3 text-white text-xs z-50 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Previous Slide / Step */}
         <button
-          onClick={goToPrevSlide}
-          disabled={currentIndex === 0}
+          onClick={handlePrev}
+          disabled={currentIndex === 0 && revealedStep === 0}
           className="p-1 rounded-full hover:bg-white/20 disabled:opacity-30 transition"
-          title="Trang trước (Mũi tên trái)"
+          title="Lùi bước / Trang trước (Mũi tên trái / Backspace)"
         >
           <ChevronLeft size={18} />
         </button>
@@ -278,15 +348,35 @@ export const SlideShowModal: React.FC<SlideShowModalProps> = ({
           {currentIndex + 1} / {slides.length}
         </span>
 
-        {/* Next Slide */}
+        {/* Next Slide / Step */}
         <button
-          onClick={goToNextSlide}
-          disabled={currentIndex === slides.length - 1}
+          onClick={handleNext}
+          disabled={currentIndex === slides.length - 1 && revealedStep >= animatedElements.length}
           className="p-1 rounded-full hover:bg-white/20 disabled:opacity-30 transition"
-          title="Trang sau (Mũi tên phải / Space)"
+          title="Tiếp tục: Chạy hiệu ứng / Sang trang (Mũi tên phải / Space / Click)"
         >
           <ChevronRight size={18} />
         </button>
+
+        {/* Animated Elements Step Indicator */}
+        {animatedElements.length > 0 && (
+          <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-500/20 border border-amber-400/40 rounded-full text-amber-300 text-[11px] font-semibold">
+            <Zap size={12} className="text-amber-400 fill-amber-400" />
+            <span>Hiệu ứng: {revealedStep}/{animatedElements.length}</span>
+            {revealedStep < animatedElements.length && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRevealedStep(animatedElements.length);
+                }}
+                className="ml-1 text-[10px] text-amber-200 hover:text-white underline cursor-pointer"
+                title="Bỏ qua hiệu ứng và hiện toàn bộ nội dung slide ngay"
+              >
+                Hiện tất
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="h-4 w-px bg-white/20"></div>
 

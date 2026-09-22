@@ -184,13 +184,13 @@ export const LectureRepositoryModal: React.FC<LectureRepositoryModalProps> = ({
                 title="Nhập bài giảng từ tệp PowerPoint (.pptx) trên máy tính"
               >
                 <FileUp size={14} className="text-amber-300" />
-                <span>Nhập PowerPoint (.pptx)</span>
+                <span>Nhập File (.pptx)</span>
               </button>
             )}
 
             <button
-              onClick={onSaveCurrentToLibrary}
-              className="px-3.5 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-900 text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+              onClick={handleSaveCurrent}
+              className="px-3.5 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-900 text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
               title="Lưu bài giảng đang soạn vào kho bài cá nhân"
             >
               <Save size={14} />
@@ -199,7 +199,7 @@ export const LectureRepositoryModal: React.FC<LectureRepositoryModalProps> = ({
 
             <button
               onClick={onNewPresentation}
-              className="px-3.5 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-bold transition flex items-center gap-1.5"
+              className="px-3.5 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
             >
               <Plus size={14} />
               <span>Tạo bài mới</span>
@@ -207,12 +207,69 @@ export const LectureRepositoryModal: React.FC<LectureRepositoryModalProps> = ({
 
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg hover:bg-white/20 text-white/90 hover:text-white transition ml-2"
+              className="p-1.5 rounded-lg hover:bg-white/20 text-white/90 hover:text-white transition ml-2 cursor-pointer"
             >
               <X size={20} />
             </button>
           </div>
         </div>
+
+        {/* Active Presentation Quick Action Bar */}
+        <div className="bg-amber-50/90 border-b border-amber-200 px-5 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0"></span>
+            <span className="text-slate-600 font-semibold shrink-0">Bài đang soạn:</span>
+            <span className="font-bold text-slate-900 truncate max-w-xs md:max-w-md" title={currentPresentation.title}>
+              {currentPresentation.title}
+            </span>
+            <span className="px-2 py-0.5 rounded bg-amber-200/80 text-amber-900 text-[10.5px] font-semibold shrink-0">
+              {currentPresentation.slides.length} trang
+            </span>
+            {isCurrentSaved ? (
+              <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10.5px] font-bold shrink-0 flex items-center gap-1 border border-emerald-300">
+                <Check size={12} /> Đã có trong Kho
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded bg-red-100 text-red-800 text-[10.5px] font-bold shrink-0 flex items-center gap-1 border border-red-200">
+                <AlertCircle size={12} /> Chưa lưu vào Kho
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleSaveCurrent}
+              className="px-3 py-1.5 bg-[#c43e1c] hover:bg-[#a83214] text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+              title="Lưu hoặc cập nhật bài giảng đang soạn vào Kho bài giảng"
+            >
+              <Save size={13} />
+              <span>{isCurrentSaved ? 'Cập nhật lại vào Kho' : 'Lưu ngay vào Kho'}</span>
+            </button>
+            {onSaveCurrentAsNewCopy && (
+              <button
+                onClick={handleSaveAsNew}
+                className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
+                title="Lưu thành một bản sao bài giảng mới riêng biệt"
+              >
+                <Plus size={13} />
+                <span>Lưu bản sao mới</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Notice Message if just saved */}
+        {saveNoticeMessage && (
+          <div className="bg-emerald-50 border-b border-emerald-200 px-5 py-2.5 flex items-center justify-between text-xs text-emerald-900 font-semibold animate-in fade-in duration-200 shrink-0">
+            <div className="flex items-center gap-2">
+              <CheckCircle size={16} className="text-emerald-600 shrink-0" />
+              <span>{saveNoticeMessage}</span>
+            </div>
+            <button onClick={() => setSaveNoticeMessage(null)} className="text-emerald-700 hover:text-emerald-900 p-1 cursor-pointer">
+              <X size={14} />
+            </button>
+          </div>
+        )}
 
         {/* Filter and Search Bar */}
         <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
@@ -262,7 +319,7 @@ export const LectureRepositoryModal: React.FC<LectureRepositoryModalProps> = ({
                 title="Nhập bài giảng có sẵn từ file PowerPoint (.pptx) trên máy tính để trình chiếu hoặc chỉnh sửa"
               >
                 <FileUp size={14} className="text-amber-300" />
-                <span>Nhập PowerPoint (.pptx)</span>
+                <span>Nhập File (.pptx)</span>
               </button>
             )}
 
@@ -296,6 +353,7 @@ export const LectureRepositoryModal: React.FC<LectureRepositoryModalProps> = ({
               {filtered.map((presentation) => {
                 const isCurrent = presentation.id === currentPresentation.id;
                 const isUserSaved = savedPresentations.some(s => s.id === presentation.id);
+                const isHighlighted = presentation.id === highlightedId;
                 const firstSlide = presentation.slides[0];
                 const slideBg = firstSlide?.backgroundColor || '#1e5385';
 
@@ -303,7 +361,11 @@ export const LectureRepositoryModal: React.FC<LectureRepositoryModalProps> = ({
                   <div
                     key={presentation.id}
                     className={`bg-white rounded-xl overflow-hidden border transition-all duration-200 flex flex-col justify-between shadow-xs hover:shadow-xl group relative ${
-                      isCurrent ? 'ring-2 ring-[#c43e1c] border-[#c43e1c]' : 'border-slate-200'
+                      isHighlighted 
+                        ? 'ring-4 ring-emerald-400 border-emerald-500 shadow-lg scale-[1.01]' 
+                        : isCurrent 
+                        ? 'ring-2 ring-[#c43e1c] border-[#c43e1c]' 
+                        : 'border-slate-200'
                     }`}
                   >
                     <div>
@@ -317,7 +379,11 @@ export const LectureRepositoryModal: React.FC<LectureRepositoryModalProps> = ({
                             {presentation.subject || 'Chủ đề chung'}
                           </span>
                           <div className="flex items-center gap-1">
-                            {isUserSaved ? (
+                            {isHighlighted ? (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold animate-pulse shadow-xs">
+                                ✓ Vừa lưu vào Kho
+                              </span>
+                            ) : isUserSaved ? (
                               <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-[10px] font-bold shadow-xs">
                                 Bài của tôi
                               </span>
@@ -382,10 +448,22 @@ export const LectureRepositoryModal: React.FC<LectureRepositoryModalProps> = ({
                       <div className="flex items-center justify-between gap-1">
                         {/* Primary action: Open / Edit in canvas */}
                         {isCurrent ? (
-                          <span className="text-emerald-700 font-bold text-xs flex items-center gap-1 py-1">
-                            <Check size={14} />
-                            <span>Đang mở bài này</span>
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-emerald-700 font-bold text-xs flex items-center gap-1 py-1">
+                              <Check size={14} />
+                              <span>{isUserSaved ? 'Đang mở & Đã lưu' : 'Đang mở'}</span>
+                            </span>
+                            {!isUserSaved && (
+                              <button
+                                onClick={handleSaveCurrent}
+                                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-md font-bold text-[11px] shadow-xs transition flex items-center gap-1 cursor-pointer"
+                                title="Lưu bài giảng đang soạn này vào Kho"
+                              >
+                                <Save size={12} />
+                                <span>Lưu vào Kho</span>
+                              </button>
+                            )}
+                          </div>
                         ) : (
                           <button
                             onClick={() => {

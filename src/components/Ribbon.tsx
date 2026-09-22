@@ -1,9 +1,10 @@
 import React from 'react';
-import { ActiveTab, SlideElement, TransitionType, PresentationTheme } from '../types/presentation';
+import { ActiveTab, SlideElement, TransitionType, PresentationTheme, ElementAnimationType } from '../types/presentation';
 import { InsertRibbon } from './InsertRibbon';
 import { HomeRibbon } from './HomeRibbon';
 import { DesignRibbon } from './DesignRibbon';
 import { TransitionsRibbon, SlideShowRibbon, HelpRibbon } from './OtherRibbons';
+import { AnimationsRibbon } from './AnimationsRibbon';
 
 interface RibbonProps {
   activeTab: ActiveTab;
@@ -29,6 +30,7 @@ interface RibbonProps {
   onAddWordArt: () => void;
   onOpenMathFormula: () => void;
   onOpenSymbolPicker: () => void;
+  onOpenMultimedia: (tab?: 'video-file' | 'video-online' | 'audio' | 'link') => void;
   onAddVideo: () => void;
   onAddAudio: () => void;
   onAddComment: () => void;
@@ -45,6 +47,12 @@ interface RibbonProps {
   currentTransition?: TransitionType;
   onChangeTransition: (trans: TransitionType) => void;
   onApplyToAllTransitions: () => void;
+  // Animations props
+  slideElements?: SlideElement[];
+  onApplyToAllAnimations?: (anim: ElementAnimationType) => void;
+  onClearAllAnimations?: () => void;
+  onPreviewAnimation?: (elementId?: string) => void;
+  onMoveAnimationOrder?: (elementId: string, direction: 'earlier' | 'later') => void;
   // Slide Show props
   onStartFromBeginning: () => void;
   onStartFromCurrent: () => void;
@@ -76,6 +84,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
   onAddWordArt,
   onOpenMathFormula,
   onOpenSymbolPicker,
+  onOpenMultimedia,
   onAddVideo,
   onAddAudio,
   onAddComment,
@@ -90,6 +99,11 @@ export const Ribbon: React.FC<RibbonProps> = ({
   currentTransition,
   onChangeTransition,
   onApplyToAllTransitions,
+  slideElements = [],
+  onApplyToAllAnimations = () => {},
+  onClearAllAnimations = () => {},
+  onPreviewAnimation = () => {},
+  onMoveAnimationOrder = () => {},
   onStartFromBeginning,
   onStartFromCurrent,
   onPresenterMode,
@@ -103,8 +117,9 @@ export const Ribbon: React.FC<RibbonProps> = ({
     { id: 'insert', label: 'Chèn' }, // Highlighted in user's image!
     { id: 'design', label: 'Thiết kế' },
     { id: 'transitions', label: 'Chuyển tiếp' },
+    { id: 'animations', label: 'Hiệu ứng' },
     { id: 'slideshow', label: 'Trình chiếu' },
-    { id: 'repository', label: 'Kho bài giảng', highlight: true },
+    { id: 'repository', label: 'Bài giảng', highlight: true },
     { id: 'help', label: 'Trợ giúp' }
   ];
 
@@ -169,6 +184,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
             onAddWordArt={onAddWordArt}
             onOpenMathFormula={onOpenMathFormula}
             onOpenSymbolPicker={onOpenSymbolPicker}
+            onOpenMultimedia={onOpenMultimedia}
             onAddVideo={onAddVideo}
             onAddAudio={onAddAudio}
             onAddComment={onAddComment}
@@ -193,6 +209,18 @@ export const Ribbon: React.FC<RibbonProps> = ({
             currentTransition={currentTransition}
             onChangeTransition={onChangeTransition}
             onApplyToAll={onApplyToAllTransitions}
+          />
+        )}
+
+        {activeTab === 'animations' && (
+          <AnimationsRibbon
+            selectedElement={selectedElement}
+            onUpdateElement={onUpdateElement}
+            slideElements={slideElements}
+            onApplyToAllElements={onApplyToAllAnimations}
+            onClearAllAnimations={onClearAllAnimations}
+            onPreviewAnimation={onPreviewAnimation}
+            onMoveOrder={onMoveAnimationOrder}
           />
         )}
 

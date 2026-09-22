@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Slide, SlideElement } from '../types/presentation';
 import { SlideElementRenderer } from './SlideElementRenderer';
-import { Trash2, Copy, Move, ArrowUp, ArrowDown, Calculator } from 'lucide-react';
+import { Trash2, Copy, Move, ArrowUp, ArrowDown, Calculator, Sparkles } from 'lucide-react';
 
 interface SlideCanvasProps {
   slide: Slide;
@@ -14,6 +14,8 @@ interface SlideCanvasProps {
   onBringForward: () => void;
   onSendBackward: () => void;
   onEditFormula?: (currentText: string) => void;
+  onOpenAnimationsTab?: () => void;
+  previewAnimationElementId?: string | null;
   aspectRatio: '16:9' | '4:3';
   zoomLevel: number; // 50 to 150 percent
 }
@@ -29,6 +31,8 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   onBringForward,
   onSendBackward,
   onEditFormula,
+  onOpenAnimationsTab,
+  previewAnimationElementId,
   aspectRatio,
   zoomLevel
 }) => {
@@ -46,6 +50,16 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   } | null>(null);
 
   const slideBg = slide.backgroundColor || defaultSlideBg;
+
+  // Sorted animated elements for PowerPoint order badges
+  const animatedElements = (slide?.elements || [])
+    .filter(el => el.animation && el.animation !== 'none')
+    .sort((a, b) => (a.animationOrder ?? 999) - (b.animationOrder ?? 999));
+
+  const getAnimationOrder = (elId: string) => {
+    const idx = animatedElements.findIndex(el => el.id === elId);
+    return idx !== -1 ? idx + 1 : null;
+  };
 
   // Handle Dragging element
   const handleMouseDown = (e: React.MouseEvent, element: SlideElement) => {
@@ -173,67 +187,118 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
       >
         {/* Render Slide Elements */}
         {slide.elements.map((element) => {
-          const isSelected = element.id === selectedElementId;
+            const isSelected = element.id === selectedElementId;
+            const animOrder = getAnimationOrder(element.id);
+            const isPreviewing = previewAnimationElementId === element.id || previewAnimationElementId === 'ALL';
+            const animClass = isPreviewing && element.animation && element.animation !== 'none'
+              ? element.animation === 'appear'
+                ? 'animate-ppt-appear'
+                : element.animation === 'fade-in'
+                ? 'animate-ppt-fade-in'
+                : element.animation === 'fly-in'
+                ? 'animate-ppt-fly-in'
+                : element.animation === 'zoom-in'
+                ? 'animate-ppt-zoom-in'
+                : ''
+              : '';
 
-          return (
-            <div
-              key={element.id}
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelectElement(element.id);
-              }}
-              onMouseDown={(e) => handleMouseDown(e, element)}
-              className={`absolute cursor-move ${
-                isSelected 
-                  ? 'ring-2 ring-blue-500 ring-offset-1 z-30 shadow-lg' 
-                  : 'hover:ring-1 hover:ring-white/40 z-10'
-              }`}
-              style={{
-                left: `${element.x}%`,
-                top: `${element.y}%`,
-                width: `${element.width}%`,
-                height: `${element.height}%`,
-                zIndex: element.zIndex || 1
-              }}
-            >
-              {/* Element Content Renderer */}
-              <SlideElementRenderer
-                element={element}
-                isSelected={isSelected}
-                onUpdateText={(newText) => onUpdateElement({ text: newText } as any)}
-                onUpdateTableCell={(row, col, val) => {
-                  if (element.type === 'table') {
-                    const currentData = [...element.data];
-                    currentData[row] = [...currentData[row]];
-                    currentData[row][col] = val;
-                    onUpdateElement({ data: currentData } as any);
-                  }
+            return (
+              <div
+                key={element.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectElement(element.id);
                 }}
-              />
-
-              {/* Selection Handles (When selected) */}
-              {isSelected && (
-                <>
-                  {/* Floating Action Bar */}
-                  <div 
-                    className="absolute -top-9 left-1/2 -translate-x-1/2 bg-slate-900/90 text-white rounded px-2 py-1 flex items-center space-x-1.5 shadow-xl text-xs z-50 pointer-events-auto"
-                    onMouseDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => handleMouseDown(e, element)}
+                className={`absolute cursor-move ${
+                  isSelected 
+                    ? 'ring-2 ring-blue-500 ring-offset-1 z-30 shadow-lg' 
+                    : 'hover:ring-1 hover:ring-white/40 z-10'
+                } ${animClass}`}
+                style={{
+                  left: `${element.x}%`,
+                  top: `${element.y}%`,
+                  width: `${element.width}%`,
+                  height: `${element.height}%`,
+                  zIndex: element.zIndex || 1
+                }}
+              >
+                {/* PowerPoint-style Animation Order Badge */}
+                {element.animation && element.animation !== 'none' && (
+                  <div
+                    className="absolute -top-3 -left-3 z-40 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-[10px] w-5 h-5 rounded-full flex items-center justify-center shadow-md ring-2 ring-white cursor-pointer select-none transition-transform hover:scale-110 pointer-events-auto"
+                    title={`Hiệu ứng #${animOrder}: ${element.animation.toUpperCase()}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectElement(element.id);
+                      if (onOpenAnimationsTab) onOpenAnimationsTab();
+                    }}
                   >
-                    {element.type === 'text' && (
-                      <button
-                        onClick={() => onEditFormula && onEditFormula((element as any).text || '')}
-                        className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 rounded text-white flex items-center gap-1 font-bold text-[11px] shadow-xs"
-                        title="Soạn công thức Toán (LaTeX)"
-                      >
-                        <Calculator size={12} />
-                        <span>LaTeX</span>
-                      </button>
-                    )}
-                    <button
-                      onClick={onDuplicateElement}
-                      className="p-1 hover:bg-slate-700 rounded text-slate-200 hover:text-white"
-                      title="Nhân bản"
+                    {animOrder}
+                  </div>
+                )}
+
+                {/* Element Content Renderer */}
+                <SlideElementRenderer
+                  element={element}
+                  isSelected={isSelected}
+                  onUpdateText={(newText) => onUpdateElement({ text: newText } as any)}
+                  onUpdateTableCell={(row, col, val) => {
+                    if (element.type === 'table') {
+                      const currentData = [...element.data];
+                      currentData[row] = [...currentData[row]];
+                      currentData[row][col] = val;
+                      onUpdateElement({ data: currentData } as any);
+                    }
+                  }}
+                />
+
+                {/* Selection Handles (When selected) */}
+                {isSelected && (
+                  <>
+                    {/* Floating Action Bar */}
+                    <div 
+                      className="absolute -top-9 left-1/2 -translate-x-1/2 bg-slate-900/90 text-white rounded px-2 py-1 flex items-center space-x-1.5 shadow-xl text-xs z-50 pointer-events-auto"
+                      onMouseDown={(e) => e.stopPropagation()}
                     >
+                      {element.type === 'text' && (
+                        <button
+                          onClick={() => onEditFormula && onEditFormula((element as any).text || '')}
+                          className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 rounded text-white flex items-center gap-1 font-bold text-[11px] shadow-xs"
+                          title="Soạn công thức Toán (LaTeX)"
+                        >
+                          <Calculator size={12} />
+                          <span>LaTeX</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onOpenAnimationsTab) onOpenAnimationsTab();
+                        }}
+                        className={`px-1.5 py-0.5 rounded flex items-center gap-1 text-[11px] font-medium transition ${
+                          element.animation && element.animation !== 'none'
+                            ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xs'
+                            : 'hover:bg-slate-700 text-slate-300 hover:text-white'
+                        }`}
+                        title="Cài đặt hiệu ứng cho khối này"
+                      >
+                        <Sparkles size={11} className={element.animation && element.animation !== 'none' ? 'text-amber-100' : ''} />
+                        <span>
+                          {element.animation && element.animation !== 'none'
+                            ? `#${animOrder} ${
+                                element.animation === 'fade-in' ? 'Mờ dần' :
+                                element.animation === 'fly-in' ? 'Bay vào' :
+                                element.animation === 'zoom-in' ? 'Thu phóng' : 'Xuất hiện'
+                              }`
+                            : 'Hiệu ứng'}
+                        </span>
+                      </button>
+                      <button
+                        onClick={onDuplicateElement}
+                        className="p-1 hover:bg-slate-700 rounded text-slate-200 hover:text-white"
+                        title="Nhân bản"
+                      >
                       <Copy size={12} />
                     </button>
                     <button

@@ -79,16 +79,13 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     <div className="h-10 bg-[#c43e1c] text-white flex items-center justify-between px-3 text-xs select-none border-b border-[#a83214] z-30 shrink-0">
       {/* Left: PPT Brand Icon & Quick Access Toolbar */}
       <div className="flex items-center space-x-2">
-        {/* PowerPoint Logo / Kho Bài Giảng Badge */}
+        {/* PowerPoint Logo / Bài Giảng Badge */}
         <div className="flex items-center space-x-1.5 font-bold tracking-wider mr-1">
           <div className="w-6 h-6 bg-white text-[#c43e1c] rounded flex items-center justify-center font-black text-sm shadow-sm">
             P
           </div>
           <span className="font-extrabold text-sm tracking-normal flex items-center gap-1">
-            KHO BÀI GIẢNG
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/20 font-semibold tracking-wide uppercase">
-              PPT Pro
-            </span>
+            BÀI GIẢNG
           </span>
         </div>
 
@@ -96,8 +93,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         <div className="flex items-center space-x-1.5 border-l border-white/20 pl-2">
           <button
             onClick={onSave}
-            title={isSaved ? 'Bài giảng đã được lưu an toàn vào Kho bài giảng (Ctrl + S)' : 'Lưu bài giảng đang soạn vào Kho bài giảng (Ctrl + S)'}
-            className={`px-2 py-1 rounded transition flex items-center gap-1.5 shadow-xs font-bold text-xs cursor-pointer ${
+            title={isSaved ? 'Đã lưu bài giảng an toàn (Ctrl + S)' : 'Lưu bài giảng đang soạn (Ctrl + S)'}
+            className={`p-1.5 rounded transition flex items-center justify-center shadow-xs cursor-pointer ${
               isSaved 
                 ? 'bg-white/15 hover:bg-white/25 text-white' 
                 : 'bg-amber-400 hover:bg-amber-300 text-slate-900 animate-pulse'
@@ -110,7 +107,6 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             ) : (
               <Save size={13} />
             )}
-            <span className="text-[11px]">{isSaved ? 'Đã lưu vào Kho' : 'Lưu vào Kho'}</span>
           </button>
 
           {/* Real-time sync indicator badge */}
@@ -161,11 +157,10 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
           <button
             onClick={onStartSlideShow}
-            title="Bắt đầu trình chiếu từ đầu (F5)"
-            className="p-1.5 rounded bg-emerald-600 hover:bg-emerald-500 font-medium transition flex items-center gap-1 shadow-xs ml-1"
+            title="Trình chiếu từ đầu (F5)"
+            className="p-1.5 rounded bg-emerald-600 hover:bg-emerald-500 font-medium transition flex items-center justify-center shadow-xs ml-0.5"
           >
             <Play size={13} className="fill-current" />
-            <span className="text-[11px] font-semibold">Trình chiếu (F5)</span>
           </button>
         </div>
       </div>
@@ -213,21 +208,21 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         {onOpenImportPptx && (
           <button
             onClick={onOpenImportPptx}
-            title="Nhập file PowerPoint (.pptx) có sẵn từ máy tính để trình chiếu hoặc chỉnh sửa"
+            title="Nhập file (.pptx, hình ảnh, bài giảng...) từ máy tính để trình chiếu hoặc chỉnh sửa"
             className="px-2.5 py-1 rounded bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold transition flex items-center gap-1.5 shadow-sm"
           >
             <FileUp size={13} className="text-slate-900" />
-            <span className="text-[11px]">Nhập PowerPoint</span>
+            <span className="text-[11px]">Nhập File</span>
           </button>
         )}
 
         <button
           onClick={onOpenRepository}
-          title="Mở Kho Bài Giảng (Các bài học mẫu & đã lưu)"
+          title="Mở danh sách Bài Giảng (Các bài học mẫu & đã lưu)"
           className="px-2.5 py-1 rounded bg-white text-[#c43e1c] hover:bg-amber-50 font-bold transition flex items-center gap-1.5 shadow-sm"
         >
           <FolderOpen size={13} />
-          <span className="text-[11px]">Kho Bài Giảng</span>
+          <span className="text-[11px]">Bài Giảng</span>
         </button>
 
         <button
