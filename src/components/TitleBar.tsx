@@ -25,6 +25,7 @@ interface TitleBarProps {
   onSave: () => void;
   isSaved: boolean;
   isRealtimeSyncing?: boolean;
+  isOnline?: boolean;
   lastSavedTime?: string;
   currentTime?: string;
   isRealtimeEnabled?: boolean;
@@ -48,6 +49,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onSave,
   isSaved,
   isRealtimeSyncing,
+  isOnline = true,
   lastSavedTime,
   currentTime,
   isRealtimeEnabled = true,
@@ -109,16 +111,24 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             )}
           </button>
 
-          {/* Real-time sync indicator badge */}
+          {/* Real-time Cloud & Offline Persistence Indicator Badge */}
           <div 
             onClick={onToggleRealtime}
             className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/20 hover:bg-black/30 cursor-pointer transition text-[10.5px]"
-            title="Trạng thái đồng bộ thời gian thực (Bấm để bật/tắt)"
+            title={!isOnline ? "Đang lưu trữ ngoại tuyến an toàn (IndexedDB) - Tự động đồng bộ lên đám mây khi có mạng" : "Đồng bộ đám mây thời gian thực - Dữ liệu bảo toàn trên mọi thiết bị"}
           >
             {isRealtimeSyncing ? (
               <>
                 <RefreshCw size={11} className="animate-spin text-amber-300" />
                 <span className="text-amber-200 font-medium">Đang lưu...</span>
+              </>
+            ) : !isOnline ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                <span className="text-amber-200 font-medium">Lưu ngoại tuyến</span>
+                {lastSavedTime && (
+                  <span className="text-white/70 text-[9.5px]">({lastSavedTime})</span>
+                )}
               </>
             ) : (
               <>

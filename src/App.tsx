@@ -35,6 +35,13 @@ import {
   subscribeToRealtimeSync, 
   getFormattedTimeString 
 } from './utils/realtimeSync';
+import {
+  savePresentationToCloud,
+  setActivePresentationIdInCloud,
+  deletePresentationFromCloud,
+  subscribeToCloudLibrary,
+  subscribeToSinglePresentation
+} from './services/presentationCloudService';
 import { CheckCircle, Info, FileUp } from 'lucide-react';
 
 export default function App() {
@@ -74,6 +81,7 @@ export default function App() {
   const [lastSavedTime, setLastSavedTime] = useState<string>(() => getFormattedTimeString());
   const [isRealtimeSyncing, setIsRealtimeSyncing] = useState<boolean>(false);
   const [isRealtimeEnabled, setIsRealtimeEnabled] = useState<boolean>(true);
+  const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -83,6 +91,24 @@ export default function App() {
     }, 3500);
   };
 
+  // Network connection monitor for offline/online persistence awareness
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      showToast('Đã kết nối Internet! Dữ liệu đang đồng bộ với đám mây Firebase.');
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      showToast('Đang chạy ở chế độ ngoại tuyến (Offline). Dữ liệu được bảo toàn trong IndexedDB!');
+    };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   // Live system clock ticker (ticks every second)
   useEffect(() => {
     const timer = setInterval(() => {
@@ -90,6 +116,45 @@ export default function App() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Multi-device Cloud Firestore Library Listener
+  useEffect(() => {
+    const unsubscribeCloudLib = subscribeToCloudLibrary((cloudList) => {
+      if (cloudList && cloudList.length > 0) {
+        setSavedLibrary(cloudList);
+        localStorage.setItem('kho_bai_giang_user_saved', JSON.stringify(cloudList));
+      }
+    });
+
+    return () => {
+      unsubscribeCloudLib();
+    };
+  }, []);
+
+  // Multi-device Cloud Firestore Active Presentation Listener
+  useEffect(() => {
+    if (!presentation.id) return;
+
+    const unsubscribeSingle = subscribeToSinglePresentation(presentation.id, (cloudP, isLocalChange) => {
+      if (!isLocalChange && cloudP) {
+        setPresentation((current) => {
+          // If remote change has different title or slides content, update smoothly
+          if (
+            current.id === cloudP.id && 
+            (current.updatedAt !== cloudP.updatedAt || current.slides.length !== cloudP.slides.length || current.title !== cloudP.title)
+          ) {
+            localStorage.setItem('kho_bai_giang_active', JSON.stringify(cloudP));
+            return cloudP;
+          }
+          return current;
+        });
+      }
+    });
+
+    return () => {
+      unsubscribeSingle();
+    };
+  }, [presentation.id]);
 
   // Multi-tab real-time sync listener via BroadcastChannel
   useEffect(() => {
@@ -186,24 +251,32 @@ export default function App() {
     });
   }, [historyIndex]);
 
-  // Real-time debounced auto-save & synchronization engine
+  // Real-time debounced auto-save & cloud synchronization engine
   useEffect(() => {
     if (!isRealtimeEnabled) return;
 
     setIsRealtimeSyncing(true);
     const timer = setTimeout(() => {
       try {
-        // 1. Save active presentation to localStorage
+        // 1. Save active presentation to localStorage (instant zero-delay local fallback)
         localStorage.setItem('kho_bai_giang_active', JSON.stringify(presentation));
 
-        // 2. Synchronize in real-time to user saved library if this lecture was saved
+        // 2. Persist to Cloud Firestore (offline IndexedDB persistent cache + multi-device cloud sync)
+        savePresentationToCloud(presentation).catch((err) => {
+          console.warn('Auto-save queued in persistent cache:', err);
+        });
+        setActivePresentationIdInCloud(presentation.id).catch((err) => {
+          console.warn('Active state save note:', err);
+        });
+
+        // 3. Synchronize in real-time to user saved library if this lecture was saved
         setSavedLibrary((prevLib) => {
           const index = prevLib.findIndex(p => p.id === presentation.id);
           if (index !== -1) {
             const updated = [...prevLib];
             updated[index] = { 
               ...presentation, 
-              updatedAt: new Date().toISOString().split('T')[0] 
+              updatedAt: new Date().toISOString()
             };
             localStorage.setItem('kho_bai_giang_user_saved', JSON.stringify(updated));
             broadcastLibrarySync(updated);
@@ -212,7 +285,7 @@ export default function App() {
           return prevLib;
         });
 
-        // 3. Broadcast real-time change to other open browser tabs
+        // 4. Broadcast real-time change to other open browser tabs
         broadcastPresentationSync(presentation);
 
         setLastSavedTime(getFormattedTimeString());
@@ -222,7 +295,7 @@ export default function App() {
       } finally {
         setIsRealtimeSyncing(false);
       }
-    }, 350);
+    }, 400);
 
     return () => clearTimeout(timer);
   }, [presentation, isRealtimeEnabled]);
@@ -1029,7 +1102,7 @@ export default function App() {
     try {
       let lectureToSave: Presentation = {
         ...presentation,
-        updatedAt: new Date().toISOString().split('T')[0]
+        updatedAt: new Date().toISOString()
       };
 
       if (asNewCopy) {
@@ -1057,12 +1130,16 @@ export default function App() {
         return updated;
       });
 
-      // 3. Save active scratchpad
+      // 3. Save active scratchpad locally and to Cloud Firestore
       localStorage.setItem('kho_bai_giang_active', JSON.stringify(lectureToSave));
+      savePresentationToCloud(lectureToSave).catch((err) => {
+        console.warn('Saved to persistent cache (pending cloud upload):', err);
+      });
+      setActivePresentationIdInCloud(lectureToSave.id).catch(console.warn);
 
       setIsSaved(true);
       setLastSavedTime(getFormattedTimeString());
-      showToast(`Đã lưu bài giảng "${lectureToSave.title}" vào Kho bài giảng thành công!`);
+      showToast(`Đã lưu bài giảng "${lectureToSave.title}" đồng bộ an toàn trên mọi thiết bị!`);
     } catch (e) {
       console.error('Save error', e);
       showToast('Có lỗi xảy ra khi lưu bài giảng vào Kho');
@@ -1093,7 +1170,10 @@ export default function App() {
     localStorage.setItem('kho_bai_giang_user_saved', JSON.stringify(updatedLib));
     broadcastLibrarySync(updatedLib);
 
-    // 3. If currently editing this presentation, update active presentation as well!
+    // 3. Persist to Cloud Firestore
+    savePresentationToCloud(updated).catch(console.warn);
+
+    // 4. If currently editing this presentation, update active presentation as well!
     if (presentation.id === updated.id) {
       setPresentation(updated);
       localStorage.setItem('kho_bai_giang_active', JSON.stringify(updated));
@@ -1107,12 +1187,13 @@ export default function App() {
       ...target,
       id: `lec-user-${Date.now()}`,
       title: `${target.title} (Bản sao)`,
-      updatedAt: new Date().toISOString().split('T')[0]
+      updatedAt: new Date().toISOString()
     };
     const updatedLib = [cloned, ...savedLibrary];
     setSavedLibrary(updatedLib);
     localStorage.setItem('kho_bai_giang_user_saved', JSON.stringify(updatedLib));
     broadcastLibrarySync(updatedLib);
+    savePresentationToCloud(cloned).catch(console.warn);
     showToast(`Đã nhân bản bài giảng "${cloned.title}" vào Kho bài giảng của bạn!`);
   };
 
@@ -1134,13 +1215,17 @@ export default function App() {
     localStorage.setItem('kho_bai_giang_deleted_ids', JSON.stringify(newDeleted));
     broadcastLibrarySync(updatedLib);
 
-    // 3. If active presentation is the one deleted, safely fallback
+    // 3. Delete from Cloud Firestore
+    deletePresentationFromCloud(id).catch(console.warn);
+
+    // 4. If active presentation is the one deleted, safely fallback
     if (presentation.id === id) {
       const remaining = allCombined.filter(l => l.id !== id && !newDeleted.includes(l.id));
       const fallback = remaining[0] || DEFAULT_PRESENTATION;
       setPresentation(fallback);
       setActiveSlideIndex(0);
       setSelectedElementId(null);
+      setActivePresentationIdInCloud(fallback.id).catch(console.warn);
     }
 
     showToast(`Đã xóa bài giảng "${target?.title || ''}" khỏi Kho bài giảng.`);
@@ -1159,7 +1244,7 @@ export default function App() {
       subject: 'Môn học',
       grade: 'Khối lớp',
       author: 'Giáo viên',
-      updatedAt: new Date().toISOString().split('T')[0],
+      updatedAt: new Date().toISOString(),
       aspectRatio: '16:9',
       themeId: 'ocean-blue',
       slides: [
@@ -1193,6 +1278,8 @@ export default function App() {
     setPresentation(blankPresentation);
     setActiveSlideIndex(0);
     setSelectedElementId(null);
+    savePresentationToCloud(blankPresentation).catch(console.warn);
+    setActivePresentationIdInCloud(blankPresentation.id).catch(console.warn);
     setIsRepositoryOpen(false);
   };
 
@@ -1271,9 +1358,10 @@ export default function App() {
       broadcastLibrarySync(updated);
       return updated;
     });
+    savePresentationToCloud(importedPresentation).catch(console.warn);
     setIsImportPptxOpen(false);
     setPptxInitialFile(null);
-    showToast(`Đã lưu bài giảng "${importedPresentation.title}" vào Kho bài giảng cá nhân!`);
+    showToast(`Đã lưu bài giảng "${importedPresentation.title}" vào Kho bài giảng cá nhân và đồng bộ đám mây!`);
   };
 
   return (
@@ -1285,6 +1373,7 @@ export default function App() {
         onSave={handleManualSave}
         isSaved={isSaved}
         isRealtimeSyncing={isRealtimeSyncing}
+        isOnline={isOnline}
         lastSavedTime={lastSavedTime}
         currentTime={currentTime}
         isRealtimeEnabled={isRealtimeEnabled}
@@ -1470,6 +1559,7 @@ export default function App() {
         currentTime={currentTime}
         lastSavedTime={lastSavedTime}
         isRealtimeSyncing={isRealtimeSyncing}
+        isOnline={isOnline}
       />
 
       {/* 5. Fullscreen Presentation Mode Modal */}
@@ -1491,6 +1581,7 @@ export default function App() {
           setPresentation(p);
           setActiveSlideIndex(0);
           setSelectedElementId(null);
+          setActivePresentationIdInCloud(p.id).catch(console.warn);
           showToast(`Đã mở bài giảng "${p.title}"`);
         }}
         onSaveCurrentToLibrary={() => handleSaveCurrentToLibrary(false)}

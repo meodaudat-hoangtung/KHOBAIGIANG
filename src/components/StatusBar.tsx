@@ -28,6 +28,7 @@ interface StatusBarProps {
   currentTime?: string;
   lastSavedTime?: string;
   isRealtimeSyncing?: boolean;
+  isOnline?: boolean;
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
@@ -42,7 +43,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   onFitToWindow,
   currentTime,
   lastSavedTime,
-  isRealtimeSyncing
+  isRealtimeSyncing,
+  isOnline = true
 }) => {
   return (
     <div className="h-6.5 bg-[#f1f3f5] border-t border-[#dadce0] px-3 flex items-center justify-between text-[11px] text-slate-600 select-none shrink-0 z-20">
@@ -65,12 +67,18 @@ export const StatusBar: React.FC<StatusBarProps> = ({
           {isRealtimeSyncing ? (
             <span className="flex items-center gap-1 text-amber-600">
               <RefreshCw size={11} className="animate-spin" />
-              <span>Đang đồng bộ...</span>
+              <span>Đang đồng bộ đám mây...</span>
+            </span>
+          ) : !isOnline ? (
+            <span className="flex items-center gap-1 text-amber-700" title="Dữ liệu được lưu trong bộ nhớ máy (IndexedDB) và sẽ tự động đồng bộ khi có mạng">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+              <span>Lưu ngoại tuyến (IndexedDB)</span>
+              {lastSavedTime && <span className="text-slate-400 text-[10px]">({lastSavedTime})</span>}
             </span>
           ) : (
-            <span className="flex items-center gap-1 text-emerald-700">
+            <span className="flex items-center gap-1 text-emerald-700" title="Đồng bộ đám mây thời gian thực - Dữ liệu thống nhất trên mọi thiết bị">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>Thời gian thực</span>
+              <span>Đám mây thời gian thực</span>
               {lastSavedTime && <span className="text-slate-400 text-[10px]">({lastSavedTime})</span>}
             </span>
           )}
