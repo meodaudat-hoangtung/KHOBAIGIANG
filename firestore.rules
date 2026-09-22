@@ -21,7 +21,8 @@ service cloud.firestore {
     function isValidAppState(data) {
       return data.keys().hasAll(['activePresentationId', 'updatedAt']) &&
              data.activePresentationId is string && data.activePresentationId.size() <= 128 &&
-             data.updatedAt is string && data.updatedAt.size() <= 64;
+             data.updatedAt is string && data.updatedAt.size() <= 64 &&
+             (!('deletedLibraryIds' in data) || data.deletedLibraryIds is list);
     }
 
     match /presentations/{presentationId} {
